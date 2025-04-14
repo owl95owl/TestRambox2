@@ -1,64 +1,56 @@
 const express = require('express');
-const bodyParser = require('body-parser');
+const fs = require('fs');
+const path = require('path');
 const { google } = require('googleapis');
-const keys = require('C:/Users/cekco/rambox-webhook/rambox-1489ade9f89a.json');  // Это твой файл с ключами Google API
-
+const bodyParser = require('body-parser');
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
-app.use(bodyParser.json()); // Для парсинга JSON данных
+// Декодируем Google credentials из переменной среды и сохраняем во временный файл
+const credentialsBase64 = process.env.GOOGLE_CREDENTIALS_BASE64;
+const decodedPath = path.join(__dirname, 'service-account-decoded.json');
 
-// Инициализация Google Sheets API
+fs.writeFileSync(decodedPath, Buffer.from(credentialsBase64, 'base64').toString('utf-8'));
+
+// Авторизация
 const auth = new google.auth.GoogleAuth({
-  credentials: keys,
+  keyFile: decodedPath,
   scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
-const sheets = google.sheets({ version: 'v4', auth });
+app.use(bodyParser.json());
 
-// ID твоей таблицы
-const spreadsheetId = '1hgWSJE7pc6sEHOwO7Ukx-s0c77bMSMyxATf3_KCtsBQ'; // Замените на ID вашей таблицы
+app.post('/submit', async (req, res) => {
+  const { phone, source } = req.body;
 
-// Эндпоинт для получения данных
-app.post('/webhook', async (req, res) => {
-  const { name, message } = req.body;
-
-  if (!name || !message) {
-    return res.status(400).send('Missing name or message');
+  if (!phone || !source) {
+    return res.status(400).send('Missing phone or source');
   }
 
   try {
-    // Данные, которые будем отправлять в Google Sheets
-    const data = [
-      [
-        new Date().toISOString(),  // Дата/время получения
-        name,
-        message,
-      ],
-    ];
+    const client = await auth.getClient();
+    const sheets = google.sheets({ version: 'v4', auth: client });
 
-    // Записываем данные в таблицу
-    await sheets.spreadsheets.values.append({
+    const spreadsheetId = '1hgWSJE7pc6sEHOwO7Ukx-s0c77bMSMyxATf3_KCtsBQ';
+    const range = 'A1'; // Начнёт писать с первой строки
+
+    const response = await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: 'Чат-статистика!A:C', // Изменили 'Лист1!A:C' на 'Чат-статистика!A:C'
+      range,
       valueInputOption: 'RAW',
-      requestBody: {
-        values: data,
+      insertDataOption: 'INSERT_ROWS',
+      resource: {
+        values: [[phone, source, new Date().toISOString()]],
       },
     });
 
-    res.status(200).send('Data sent to Google Sheets');
+    res.status(200).send('Data appended to Google Sheets');
   } catch (error) {
-    console.error('Error:', error);
-    res.status(500).send('Error sending data to Google Sheets');
+    console.error('Ошибка при отправке в таблицу:', error);
+    res.status(500).send('Internal Server Error');
   }
 });
 
-
 app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
+  console.log(`Сервер запущен на порту ${port}`);
 });
-
-
-
-
