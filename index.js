@@ -1,56 +1,45 @@
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
-const { google } = require('googleapis');
-const bodyParser = require('body-parser');
+const fetch = require('node-fetch');
 const app = express();
-const port = process.env.PORT || 3000;
 
-// Декодируем Google credentials из переменной среды и сохраняем во временный файл
-const credentialsBase64 = process.env.GOOGLE_CREDENTIALS_BASE64;
-const decodedPath = path.join(__dirname, 'service-account-decoded.json');
-
-fs.writeFileSync(decodedPath, Buffer.from(credentialsBase64, 'base64').toString('utf-8'));
-
-// Авторизация
-const auth = new google.auth.GoogleAuth({
-  keyFile: decodedPath,
-  scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+// CORS middleware
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*"); // разрешаем всем
+  res.header("Access-Control-Allow-Methods", "GET,POST");
+  res.header("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
 });
 
-app.use(bodyParser.json());
+app.use(express.json());
 
-app.post('/submit', async (req, res) => {
-  const { phone, source } = req.body;
+// POST / обработка данных
+app.post('/', async (req, res) => {
+  const { phone, tag } = req.body;
 
-  if (!phone || !source) {
-    return res.status(400).send('Missing phone or source');
+  if (!phone || !tag) {
+    return res.status(400).json({ status: 'error', message: 'Phone and tag are required' });
   }
+
+  const googleUrl = 'https://script.google.com/macros/s/AKfycbwGo7Hrx80jLm8QUxW5SR7_Q1_FclqNLhQyDIsnPSTKuUbfuptj4ZDGewS060RrEVn8/exec';
 
   try {
-    const client = await auth.getClient();
-    const sheets = google.sheets({ version: 'v4', auth: client });
-
-    const spreadsheetId = '1hgWSJE7pc6sEHOwO7Ukx-s0c77bMSMyxATf3_KCtsBQ';
-    const range = 'A1'; // Начнёт писать с первой строки
-
-    const response = await sheets.spreadsheets.values.append({
-      spreadsheetId,
-      range,
-      valueInputOption: 'RAW',
-      insertDataOption: 'INSERT_ROWS',
-      resource: {
-        values: [[phone, source, new Date().toISOString()]],
-      },
+    const response = await fetch(googleUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, tag })
     });
 
-    res.status(200).send('Data appended to Google Sheets');
-  } catch (error) {
-    console.error('Ошибка при отправке в таблицу:', error);
-    res.status(500).send('Internal Server Error');
+    const data = await response.json();
+    return res.json({ status: 'success', message: 'Data sent to Google Sheets', data });
+  } catch (err) {
+    return res.status(500).json({ status: 'error', message: err.message });
   }
 });
 
-app.listen(port, () => {
-  console.log(`Сервер запущен на порту ${port}`);
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
