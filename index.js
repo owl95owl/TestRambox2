@@ -1,15 +1,26 @@
+const express = require('express');
+const bodyParser = require('body-parser');
+const fetch = require('node-fetch'); // если не установлено — установи: npm install node-fetch
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(bodyParser.json());
+
 app.post('/send', async (req, res) => {
   const { phone, tag } = req.body;
-
-  // Логируем пришедшие данные для отладки
-  console.log('Received data:', req.body);
+  console.log('POST /send received:', req.body);
 
   if (!phone || !tag) {
     return res.status(400).json({ status: 'error', message: 'Phone and tag are required' });
   }
 
-  // Замените на ваш URL Google Apps Script
-  const googleUrl = 'https://script.google.com/macros/s/AKfycbwGo7Hrx80jLm8QUxW5SR7_Q1_FclqNLhQyDIsnPSTKuUbfuptj4ZDGewS060RrEVn8/exec';
+  // Временно отключим Google Script, чтобы не висло
+  return res.json({ status: 'success', message: 'Test success (без Google Script)', data: { phone, tag } });
+
+  // Если потом хочешь вернуть — раскомментируй:
+  /*
+  const googleUrl = 'https://script.google.com/macros/s/___ТВОЙ_URL___/exec';
 
   try {
     const response = await fetch(googleUrl, {
@@ -23,4 +34,9 @@ app.post('/send', async (req, res) => {
   } catch (err) {
     return res.status(500).json({ status: 'error', message: err.message });
   }
+  */
+});
+
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
